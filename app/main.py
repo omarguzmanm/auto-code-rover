@@ -100,6 +100,8 @@ def main():
     config.enable_perfect_angelic = args.enable_perfect_angelic
     config.only_save_sbfl_result = args.save_sbfl_result
     config.only_reproduce = args.reproduce
+    config.stop_after_first_patch = args.stop_after_first_patch
+    config.stop_on_patch_not_applicable = args.stop_on_patch_not_applicable
 
     subcommand = getattr(args, subparser_dest_attr_name)
     if subcommand == "swe-bench":
@@ -252,7 +254,7 @@ def add_task_related_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--conv-round-limit",
         type=int,
-        default=15,
+        default=1,
         help="Conversation round limit for the main agent.",
     )
     parser.add_argument(
@@ -293,6 +295,18 @@ def add_task_related_args(parser: ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="Special mode to only generate reproducer tests",
+    )
+    parser.add_argument(
+        "--stop-after-first-patch",
+        action="store_true",
+        default=False,
+        help="Stop execution after the first successful patch generation",
+    )
+    parser.add_argument(
+        "--stop-on-patch-not-applicable",
+        action="store_true",
+        default=False,
+        help="Stop execution immediately when a patch is not applicable (simulates Ctrl+C)",
     )
     parser.add_argument(
         "--num-processes",
@@ -411,7 +425,10 @@ def run_task_groups(
 
 def run_tasks_serial(tasks: list[RawTask]) -> None:
     for task in tasks:
-        run_task_in_subprocess(task)
+        success = run_task_in_subprocess(task)
+        if config.stop_after_first_patch and success:
+            log.print_with_time("Stopping after first successful patch generation as requested.")
+            break
 
 
 def run_task_groups_parallel(
@@ -449,17 +466,21 @@ def run_task_group(task_group_id: str, task_group_items: list[RawTask]) -> None:
     )
     for task in task_group_items:
         # within a group, the runs are always sequential
-        run_task_in_subprocess(task)
+        success = run_task_in_subprocess(task)
         log.print_with_time(task_counter.incre_task_return_msg())
+        if config.stop_after_first_patch and success:
+            log.print_with_time("Stopping after first successful patch generation as requested.")
+            break
 
     log.print_with_time(
         f"{task_counter.incre_task_group_return_msg()} Finished task group {task_group_id}."
     )
 
 
-def run_task_in_subprocess(task: RawTask) -> None:
+def run_task_in_subprocess(task: RawTask) -> bool:
     with ProcessPoolExecutor(max_workers=1) as executor:
-        executor.submit(run_raw_task, task)
+        future = executor.submit(run_raw_task, task)
+        return future.result()
 
 
 def run_raw_task(task: RawTask) -> bool:

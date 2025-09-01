@@ -407,3 +407,9 @@ class Gpt4_0613(OpenaiModel):
 class Gpt4o_mini_20240718(OpenaiModel):
     def __init__(self):
         super().__init__("gpt-4o-mini-2024-07-18", 4096, 0.00000015, 0.0000006)
+
+
+class Gpt4_1_mini(OpenaiModel):
+    def __init__(self):
+        super().__init__("gpt-4.1-mini", 4096, 0.00000015, 0.0000006, parallel_tool_call=True)
+        self.note = "Azure GPT-4.1-mini deployment model."

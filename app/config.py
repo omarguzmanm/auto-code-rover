@@ -9,7 +9,7 @@ output_dir: str = ""
 overall_retry_limit: int = 3
 
 # upper bound of the number of conversation rounds for the agent
-conv_round_limit: int = 15
+conv_round_limit: int = 1
 
 # whether to perform sbfl
 enable_sbfl: bool = False
@@ -35,6 +35,9 @@ only_eval_reproducer: bool = False
 
 # Experimental mode to add reproducer and reviewer into the workflow
 reproduce_and_review: bool = False
+
+# Stop after the first successful patch generation
+stop_after_first_patch: bool = False
 
 # timeout for test cmd execution, currently set to 5 min
 test_exec_timeout: int = 300
