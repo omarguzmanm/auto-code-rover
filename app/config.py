@@ -54,6 +54,9 @@ _extracted_patch_counter: int = 0
 # Issue number for unique filenames (set externally)
 current_issue_number: int = 1
 
+# Current issue file path (set externally)
+current_issue_file: str = ""
+
 # Global flag set when patch is not applicable (internal use)
 _should_terminate_on_patch_not_applicable: bool = False
 

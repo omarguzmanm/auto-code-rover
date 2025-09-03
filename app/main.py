@@ -143,6 +143,7 @@ def main():
         issue_file = args.issue_file
         if issue_file is not None:
             issue_file = abspath(issue_file)
+            config.current_issue_file = issue_file
         task = RawLocalTask(
             args.task_id,
             local_repo,

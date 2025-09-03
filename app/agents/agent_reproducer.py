@@ -153,7 +153,9 @@ class TestAgent:
                 prefix_thread.to_msg(), response_format="json_object"
             )
 
-            result = json.loads(response)[key]
+            # Clean the response in case it contains markdown formatting
+            cleaned_response = re.sub(r'```(?:json)?\n(.*?)\n```', r'\1', response, flags=re.DOTALL)
+            result = json.loads(cleaned_response)[key]
 
             if not isinstance(result, bool):
                 raise InvalidLLMResponse

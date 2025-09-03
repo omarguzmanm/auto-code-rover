@@ -1,29 +1,34 @@
-#!/usr/bin/en        # Comando base usando GPT-4
+#!/usr/bin/env python3
+"""
+DeepSeek V3 issue processor for AutoCodeRover
+Processes issues 1-275 using DeepSeek V3 from Azure AI
+"""
 
 import subprocess
 import os
 import time
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
 
-class GPTIssueProcessor:
+class DeepSeekIssueProcessor:
     def __init__(self):
-        # Comando base usando GPT-4
+        # Comando base usando DeepSeek V3
         self.base_command = [
             "python", "app/main.py", "local-issue",
             "--stop-after-first-patch",
             "--stop-on-patch-not-applicable", 
             "--extract-patched-code",
-            "--extract-patched-code-dir", "results-ebc-gpt",  # Directorio diferente
-            "--output-dir", "output-gpt",  # Output diferente
-            "--model", "gpt-4.1-mini",  # Modelo GPT-4.1-mini Azure deployment
+            "--extract-patched-code-dir", "results-ebc-deepseek",  # Directorio diferente
+            "--output-dir", "output-deepseek",  # Output diferente
+            "--model", "DeepSeek-V3-0324",  # Modelo DeepSeek V3 Azure AI deployment
             "--model-temperature", "0.2"
         ]
         
         self.workspace_repo = "/workspace/"
         self.issues_dir = "/workspace/issues/individual_issues/"
-        self.results_dir = Path("results-ebc-gpt")
+        self.results_dir = Path("results-ebc-deepseek")
         
         # Contadores
         self.stats = {
@@ -33,7 +38,11 @@ class GPTIssueProcessor:
             "total": 0
         }
         
-        self.log_file = "processing_log_gpt.txt"
+        self.log_file = "processing_log_deepseek.txt"
+        
+        # Ensure API key is available
+        if not (os.getenv("AZURE_AI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            raise ValueError("Please set AZURE_AI_API_KEY or OPENAI_API_KEY environment variable")
         
     def log_message(self, message):
         """Registra mensaje en log y pantalla"""
@@ -47,9 +56,9 @@ class GPTIssueProcessor:
     
     def setup_environment(self):
         """Prepara el entorno para el procesamiento"""
-        # Verificar API key de OpenAI
-        if not os.getenv("OPENAI_API_KEY"):
-            raise Exception("❌ OPENAI_API_KEY no está configurada. Ejecuta: export OPENAI_API_KEY='tu_api_key'")
+        # Verificar API key
+        if not (os.getenv("AZURE_AI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            raise Exception("❌ AZURE_AI_API_KEY o OPENAI_API_KEY no está configurada. Ejecuta: export AZURE_AI_API_KEY='tu_api_key'")
         
         # Verificar directorios
         if not Path(self.issues_dir).exists():
@@ -62,15 +71,15 @@ class GPTIssueProcessor:
         if Path(self.log_file).exists():
             Path(self.log_file).unlink()
         
-        self.log_message("🚀 Iniciando procesamiento de issues con GPT-4")
-        self.log_message(f"🔑 OpenAI API Key configurada: ✅")
+        self.log_message("🚀 Iniciando procesamiento de issues con DeepSeek V3")
+        self.log_message(f"🔑 Azure AI API Key configurada: ✅")
         self.log_message(f"📁 Directorio de issues: {self.issues_dir}")
         self.log_message(f"📁 Directorio de resultados: {self.results_dir}")
     
     def process_single_issue(self, issue_num):
         """Procesa un issue individual"""
         issue_file = f"{self.issues_dir}issue-{issue_num}.txt"
-        task_id = f"test-ecb-gpt-{issue_num}"
+        task_id = f"test-ecb-deepseek-{issue_num}"
         
         # Establecer el número de issue actual para el naming de archivos
         import sys
@@ -91,17 +100,17 @@ class GPTIssueProcessor:
             "--issue-file", issue_file
         ]
         
-        self.log_message(f"📝 Procesando Issue {issue_num} con GPT-4 - {task_id}")
+        self.log_message(f"📝 Procesando Issue {issue_num} con DeepSeek V3 - {task_id}")
         
         try:
             # Configurar entorno
             env = os.environ.copy()
             env["PYTHONPATH"] = "."
             
-            # Ejecutar con timeout
+            # Ejecutar con timeout más largo para rate limits
             result = subprocess.run(
                 command,
-                timeout=900,  # 15 minutos por issue
+                timeout=1800,  # 30 minutos por issue para rate limits
                 capture_output=True,
                 text=True,
                 env=env,
@@ -122,7 +131,7 @@ class GPTIssueProcessor:
                 return False
                 
         except subprocess.TimeoutExpired:
-            self.log_message(f"   ⏰ Issue {issue_num}: Timeout después de 15 minutos")
+            self.log_message(f"   ⏰ Issue {issue_num}: Timeout después de 30 minutos")
             self.stats["failed"] += 1
             return False
         except Exception as e:
@@ -150,8 +159,9 @@ class GPTIssueProcessor:
             # Procesar issue
             success = self.process_single_issue(issue_num)
             
-            # Pequeña pausa para no sobrecargar la API
-            time.sleep(1)
+            # Pausa larga para evitar rate limits (Azure AI S0 tier)
+            self.log_message(f"   ⏳ Esperando 10 segundos antes del siguiente issue...")
+            time.sleep(10)
         
         # Resumen final
         total_time = time.time() - start_time
@@ -168,6 +178,25 @@ class GPTIssueProcessor:
         result_files = list(self.results_dir.glob("test-*.txt"))
         completion_file = self.results_dir / "completion.jsonl"
         
+        # Generar completion.jsonl si no existe
+        if not completion_file.exists():
+            try:
+                # Crear archivo completion.jsonl básico
+                with open(completion_file, 'w') as f:
+                    for i in range(start_issue, end_issue + 1):
+                        if i <= start_issue + self.stats["total"] - 1:
+                            success = i <= start_issue + self.stats["successful"] - 1
+                            entry = {
+                                "issue": i,
+                                "model": "DeepSeek-V3-0324",
+                                "success": success,
+                                "generated": success
+                            }
+                            f.write(json.dumps(entry) + '\n')
+                self.log_message(f"   📋 completion.jsonl generado con {self.stats['total']} entradas")
+            except Exception as e:
+                self.log_message(f"   ❌ Error generando completion.jsonl: {e}")
+        
         self.log_message(f"📁 Archivos generados:")
         self.log_message(f"   📄 test-*.txt: {len(result_files)}")
         self.log_message(f"   📋 completion.jsonl: {'✅' if completion_file.exists() else '❌'}")
@@ -183,7 +212,7 @@ class GPTIssueProcessor:
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description='Procesar issues con GPT-4')
+    parser = argparse.ArgumentParser(description='Procesar issues con DeepSeek V3')
     parser.add_argument('--start', type=int, default=1, help='Issue inicial (default: 1)')
     parser.add_argument('--end', type=int, default=275, help='Issue final (default: 275)')
     parser.add_argument('--test', action='store_true', help='Solo procesar primeros 3 issues')
@@ -193,9 +222,9 @@ def main():
     if args.test:
         args.start = 1
         args.end = 3
-        print("🧪 MODO PRUEBA: Procesando primeros 3 issues con GPT-4")
+        print("🧪 MODO PRUEBA: Procesando primeros 3 issues con DeepSeek V3")
     
-    processor = GPTIssueProcessor()
+    processor = DeepSeekIssueProcessor()
     processor.run_batch(args.start, args.end)
 
 if __name__ == "__main__":

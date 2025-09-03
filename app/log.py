@@ -166,20 +166,41 @@ def extract_and_save_patched_code(msg: str) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created/verified directory: {output_dir}")
         
-        # Extract namespace from <file> tag
+        # Extract namespace from issue file instead of from patch
         namespace = None
-        file_pattern = r'<file>(.*?)</file>'
-        file_matches = re.findall(file_pattern, msg)
-        if file_matches:
-            file_path = file_matches[0].strip()
-            # Remove Source_Code/ prefix and .py suffix, convert to namespace
-            if file_path.startswith('Source_Code/'):
-                namespace_path = file_path[len('Source_Code/'):]
-                if namespace_path.endswith('.py'):
-                    namespace_path = namespace_path[:-3]
-                # Convert path separators to dots for namespace
-                namespace = namespace_path.replace('/', '.')
-                logger.info(f"Extracted namespace: {namespace}")
+        if config.current_issue_file and Path(config.current_issue_file).exists():
+            try:
+                with open(config.current_issue_file, 'r', encoding='utf-8') as f:
+                    issue_content = f.read()
+                    # Look for **Namespace:** pattern in the issue
+                    namespace_pattern = r'\*\*Namespace:\*\*\s*`([^`]+)`'
+                    namespace_match = re.search(namespace_pattern, issue_content)
+                    if not namespace_match:
+                        # Try alternative pattern without backticks
+                        namespace_pattern = r'\*\*Namespace:\*\*\s*([^\n\r]+)'
+                        namespace_match = re.search(namespace_pattern, issue_content)
+                    if namespace_match:
+                        namespace = namespace_match.group(1).strip()
+                        logger.info(f"Extracted namespace from issue: {namespace}")
+                    else:
+                        logger.warning("No **Namespace:** pattern found in issue file")
+            except Exception as e:
+                logger.error(f"Error reading issue file for namespace: {e}")
+        
+        # Fallback: Extract namespace from <file> tag if not found in issue
+        if not namespace:
+            file_pattern = r'<file>(.*?)</file>'
+            file_matches = re.findall(file_pattern, msg)
+            if file_matches:
+                file_path = file_matches[0].strip()
+                # Remove Source_Code/ prefix and .py suffix, convert to namespace
+                if file_path.startswith('Source_Code/'):
+                    namespace_path = file_path[len('Source_Code/'):]
+                    if namespace_path.endswith('.py'):
+                        namespace_path = namespace_path[:-3]
+                    # Convert path separators to dots for namespace
+                    namespace = namespace_path.replace('/', '.')
+                    logger.info(f"Extracted namespace from patch file tag: {namespace}")
         
         # Combine all patches for this issue into one file
         filename = f"test-{config.current_issue_number}.txt"
