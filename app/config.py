@@ -39,6 +39,24 @@ reproduce_and_review: bool = False
 # Stop after the first successful patch generation
 stop_after_first_patch: bool = False
 
+# Stop immediately when patch is not applicable
+stop_on_patch_not_applicable: bool = False
+
+# Extract patched code from patch generation panels
+extract_patched_code: bool = False
+
+# Directory to save extracted patched code
+extract_patched_code_dir: str = "results-ebc"
+
+# Counter for extracted patches (starts at 0, will be incremented)
+_extracted_patch_counter: int = 0
+
+# Issue number for unique filenames (set externally)
+current_issue_number: int = 1
+
+# Global flag set when patch is not applicable (internal use)
+_should_terminate_on_patch_not_applicable: bool = False
+
 # timeout for test cmd execution, currently set to 5 min
 test_exec_timeout: int = 300
 

@@ -102,6 +102,8 @@ def main():
     config.only_reproduce = args.reproduce
     config.stop_after_first_patch = args.stop_after_first_patch
     config.stop_on_patch_not_applicable = args.stop_on_patch_not_applicable
+    config.extract_patched_code = args.extract_patched_code
+    config.extract_patched_code_dir = args.extract_patched_code_dir
 
     subcommand = getattr(args, subparser_dest_attr_name)
     if subcommand == "swe-bench":
@@ -313,6 +315,18 @@ def add_task_related_args(parser: ArgumentParser) -> None:
         type=str,
         default=1,
         help="Number of processes to run the tasks in parallel.",
+    )
+    parser.add_argument(
+        "--extract-patched-code",
+        action="store_true",
+        default=False,
+        help="Extract and save patched code sections to files.",
+    )
+    parser.add_argument(
+        "--extract-patched-code-dir",
+        type=str,
+        default="results-ebc",
+        help="Directory to save extracted patched code files.",
     )
 
 

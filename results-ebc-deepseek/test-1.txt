@@ -1,0 +1,20 @@
+def destroy(self):
+"""
+The destroy method is responsible for stopping all connections managed by the ProxifierMessageInterceptor instance and then stopping the server associated with it, if any. This method ensures that all active connections are properly terminated before stopping the server.
+Input-Output Arguments
+:param self: ProxifierMessageInterceptor. An instance of the ProxifierMessageInterceptor class. It uses its 'connections' attribute to manage individual connections and a 'server' attribute to manage the server instance.
+:return: No return values.
+"""
+    if hasattr(self, 'connections'):
+        for connection in list(self.connections):
+            try:
+                connection.close()
+            except Exception:
+                pass
+        self.connections.clear()
+
+    if hasattr(self, 'server') and self.server is not None:
+        try:
+            self.server.stop()
+        except Exception:
+            pass

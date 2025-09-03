@@ -1,0 +1,16 @@
+import logging
+
+def gfpgan_fix_faces(np_image):
+    """
+    This function attempts to restore faces in an image using the GFPGAN face restorer. If the GFPGAN face restorer is not set up, it logs a warning and returns the original image.
+    Input-Output Arguments
+    :param np_image: The image as a NumPy array on which face restoration is attempted.
+    :return: The image as a NumPy array. It is either the original image or the restored image if the GFPGAN face restorer is set up and used successfully.
+    """
+    if not hasattr(gfpgan_fix_faces, "gfpgan_face_restorer") or gfpgan_fix_faces.gfpgan_face_restorer is None:
+        logging.warning("GFPGAN face restorer is not initialized. Returning original image.")
+        return np_image
+
+    # Apply face restoration
+    restored_faces, restored_img = gfpgan_fix_faces.gfpgan_face_restorer.enhance(np_image, has_aligned=True, only_center_face=False, paste_back=True)
+    return restored_img
