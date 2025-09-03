@@ -64,7 +64,7 @@ def write_patch_iterative(
     task: Task,
     output_dir: str,
     review_manager: ReviewManager,
-    retries=3,
+    retries=1,
 ) -> bool:
     logger.info("Start generating patches without reviewer")
 
@@ -74,7 +74,22 @@ def write_patch_iterative(
         try:
             patch_handle, patch_content = patch_gen.send(None)
             logger.info("Generated applicable patch: {}", patch_handle)
+            
+            # Check if we're running in code extraction mode and completion signal exists
+            import sys
+            from pathlib import Path
+            if '--extract-patched-code' in sys.argv:
+                signal_file = Path(output_dir).parent / "extraction_complete.signal"
+                if signal_file.exists():
+                    patch_gen.close()
+                    logger.info("🎯 Code extraction completed successfully - ending workflow")
+                    return True
+                
         except StopIteration:
+            # Generator ended naturally (could be due to extraction completion)
+            if '--extract-patched-code' in sys.argv:
+                logger.info("🎯 Generator completed - extraction mode successful")
+                return True
             break
 
         logger.info("Begin evaluating patch: {}", patch_handle)
@@ -327,13 +342,13 @@ def _run_one_task(
     if config.reproduce_and_review and reproduced:
         try:
             return write_patch_iterative_with_review(
-                api_manager.task, output_dir, review_manager
+                api_manager.task, output_dir, review_manager, retries=1
             )
         # this exception can arise when writing new reproducers
         except NoReproductionStep:
             pass
 
-    result = write_patch_iterative(api_manager.task, output_dir, review_manager)
+    result = write_patch_iterative(api_manager.task, output_dir, review_manager, retries=1)
     logger.info(
         "Invoked write_patch. Since there is no reproducer, the workflow will be terminated."
     )

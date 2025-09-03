@@ -24,6 +24,15 @@ from openai.types.chat.chat_completion_tool_choice_option_param import (
 from openai.types.chat.completion_create_params import ResponseFormat
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
+# Azure AI Inference imports for DeepSeek
+try:
+    from azure.ai.inference import ChatCompletionsClient
+    from azure.ai.inference.models import SystemMessage, UserMessage, AssistantMessage
+    from azure.core.credentials import AzureKeyCredential
+    AZURE_AI_AVAILABLE = True
+except ImportError:
+    AZURE_AI_AVAILABLE = False
+
 from app.data_structures import FunctionCallIntent
 from app.log import log_and_print
 from app.model import common
@@ -65,16 +74,19 @@ class OpenaiModel(Model):
 
     def setup(self) -> None:
         """
-        Check API key, and initialize OpenAI client.
+        Check API key, and initialize OpenAI client for Azure.
         """
         if self.client is None:
             key = self.check_api_key()
-            self.client = OpenAI(api_key=key)
+            # Azure OpenAI configuration
+            endpoint = "https://omara-mexwy2b2-eastus2.cognitiveservices.azure.com/openai/v1/"
+            self.client = OpenAI(base_url=endpoint, api_key=key)
 
     def check_api_key(self) -> str:
-        key = os.getenv("OPENAI_KEY")
+        # Try Azure API key first, then fallback to standard
+        key = os.getenv("OPENAI_API_KEY") or os.getenv("AZURE_OPENAI_API_KEY")
         if not key:
-            print("Please set the OPENAI_KEY env var")
+            print("Please set the OPENAI_API_KEY or AZURE_OPENAI_API_KEY env var")
             sys.exit(1)
         return key
 
@@ -328,6 +340,11 @@ class Gpt_o1(OpenaiModel):
             **kwargs,
         )
 
+class Gpt4_1_mini(OpenaiModel):
+    def __init__(self):
+        # Use the Azure deployment name instead of model name
+        super().__init__("gpt-4.1-mini", 16384, 0.0000025, 0.000010, parallel_tool_call=True)
+        self.note = "Azure custom deployment: gpt-4.1-mini"
 
 class Gpt4o_20240806(OpenaiModel):
     def __init__(self):
@@ -409,7 +426,142 @@ class Gpt4o_mini_20240718(OpenaiModel):
         super().__init__("gpt-4o-mini-2024-07-18", 4096, 0.00000015, 0.0000006)
 
 
-class Gpt4_1_mini(OpenaiModel):
+class DeepSeekV3(Model):
+    """
+    DeepSeek V3 model using Azure AI Inference
+    """
+    
+    _instances = {}
+
+    def __new__(cls):
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__new__(cls)
+            cls._instances[cls]._initialized = False
+        return cls._instances[cls]
+
     def __init__(self):
-        super().__init__("gpt-4.1-mini", 4096, 0.00000015, 0.0000006, parallel_tool_call=True)
-        self.note = "Azure GPT-4.1-mini deployment model."
+        if self._initialized:
+            return
+        super().__init__(
+            "DeepSeek-V3-0324", 
+            cost_per_input=0.0000014,  # Estimated cost per input token
+            cost_per_output=0.0000028,  # Estimated cost per output token
+            parallel_tool_call=False
+        )
+        self.max_output_token = 4096
+        self.client = None
+        self.endpoint = "https://omaralexguzmanm21-7613-resource.services.ai.azure.com/models"
+        self.model_name = "DeepSeek-V3-0324"
+        self.note = "DeepSeek V3 via Azure AI Inference"
+        self._initialized = True
+
+    def setup(self) -> None:
+        """Initialize Azure AI Inference client for DeepSeek"""
+        if not AZURE_AI_AVAILABLE:
+            print("Azure AI Inference package not available. Please install: pip install azure-ai-inference")
+            sys.exit(1)
+            
+        if self.client is None:
+            api_key = self.check_api_key()
+            self.client = ChatCompletionsClient(
+                endpoint=self.endpoint,
+                credential=AzureKeyCredential(api_key),
+                api_version="2024-05-01-preview"
+            )
+
+    def check_api_key(self) -> str:
+        """Check for Azure AI API key"""
+        key = os.getenv("AZURE_AI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not key:
+            print("Please set the AZURE_AI_API_KEY or OPENAI_API_KEY env var for DeepSeek")
+            sys.exit(1)
+        return key
+
+    def _convert_messages(self, messages: list[dict]) -> list:
+        """Convert OpenAI format messages to Azure AI format"""
+        azure_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                azure_messages.append(SystemMessage(content=content))
+            elif role == "user":
+                azure_messages.append(UserMessage(content=content))
+            elif role == "assistant":
+                azure_messages.append(AssistantMessage(content=content))
+        
+        return azure_messages
+
+    @retry(wait=wait_random_exponential(min=30, max=600), stop=stop_after_attempt(3))
+    def call(
+        self,
+        messages: list[dict],
+        top_p: float = 1,
+        tools: list[dict] | None = None,
+        response_format: Literal["text", "json_object"] = "text",
+        temperature: float | None = None,
+        **kwargs,
+    ) -> tuple[
+        str,
+        list[ChatCompletionMessageToolCall] | None,
+        list[FunctionCallIntent],
+        float,
+        int,
+        int,
+    ]:
+        """
+        Call DeepSeek V3 via Azure AI Inference with enhanced rate limit handling
+        """
+        if temperature is None:
+            temperature = common.MODEL_TEMP
+
+        assert self.client is not None
+        
+        try:
+            # Convert messages to Azure AI format
+            azure_messages = self._convert_messages(messages)
+            
+            # Make API call with rate limit handling
+            response = self.client.complete(
+                messages=azure_messages,
+                max_tokens=self.max_output_token,
+                temperature=temperature,
+                top_p=top_p,
+                presence_penalty=0.0,
+                frequency_penalty=0.0,
+                model=self.model_name
+            )
+            
+            # Extract response content
+            content = response.choices[0].message.content or ""
+            
+            # Calculate costs (estimated based on input/output tokens)
+            # Note: Azure AI Inference might not provide exact token counts
+            input_tokens = sum(len(msg.get("content", "").split()) for msg in messages) * 1.3  # Rough estimate
+            output_tokens = len(content.split()) * 1.3  # Rough estimate
+            cost = self.calc_cost(int(input_tokens), int(output_tokens))
+            
+            # Update thread costs
+            common.thread_cost.process_cost += cost
+            common.thread_cost.process_input_tokens += int(input_tokens)
+            common.thread_cost.process_output_tokens += int(output_tokens)
+            
+            # Return in expected format (no tool calls for now)
+            return (
+                content,
+                None,  # raw_tool_calls
+                [],    # func_call_intents
+                cost,
+                int(input_tokens),
+                int(output_tokens),
+            )
+            
+        except Exception as e:
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                logger.warning(f"DeepSeek rate limit hit, will retry with backoff: {e}")
+                # Sleep additional time for rate limits beyond tenacity retry
+                import time
+                time.sleep(60)  # Wait 1 minute extra for rate limits
+            logger.error(f"DeepSeek API error: {e}")
+            raise e

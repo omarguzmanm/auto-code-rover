@@ -267,6 +267,14 @@ def extract_and_save_patched_code(msg: str) -> None:
                     logger.info(f"Namespace: {namespace}")
                     logger.info(f"Completion preview: {completion_code[:50]}...")
                     
+                    # Signal completion for extraction mode
+                    import sys
+                    if '--extract-patched-code' in sys.argv:
+                        logger.info("🎯 Code extraction completed successfully - signaling completion")
+                        # Create a completion signal file
+                        signal_file = output_dir / "extraction_complete.signal"
+                        signal_file.touch()
+                    
                 except Exception as e:
                     print(f"❌ Error saving completion to JSONL: {e}")
                     logger.error(f"Error saving completion to JSONL: {e}")

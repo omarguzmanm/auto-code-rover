@@ -6,7 +6,7 @@ Values of global configuration variables.
 output_dir: str = ""
 
 # Max number of times context retrieval and all is tried
-overall_retry_limit: int = 3
+overall_retry_limit: int = 1
 
 # upper bound of the number of conversation rounds for the agent
 conv_round_limit: int = 1

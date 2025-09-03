@@ -48,15 +48,26 @@ class ReviewManager:
     def patch_only_generator(
         self,
     ) -> Generator[tuple[PatchHandle, str], str | None, None]:
+        from pathlib import Path
+        import sys
+        
         try:
             while True:
                 (
                     patch_handle,
                     patch_content,
-                ) = self.patch_agent.write_applicable_patch_without_feedback()
+                ) = self.patch_agent.write_applicable_patch_without_feedback(retries=1)
                 self.save_patch(patch_handle, patch_content)
 
                 yield patch_handle, patch_content
+                
+                # Check if we're in extraction mode and completion signal exists
+                if '--extract-patched-code' in sys.argv:
+                    signal_file = Path(self.output_dir) / "extraction_complete.signal"
+                    if signal_file.exists():
+                        logger.info("🎯 Extraction signal detected - terminating generator")
+                        break
+                        
         except InvalidLLMResponse as e:
             logger.info("Aborting patch-only with exception: {}", str(e))
 

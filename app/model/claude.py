@@ -162,3 +162,10 @@ class Claude3_5SonnetNew(AnthropicModel):
             "claude-3-5-sonnet-20241022", 0.000003, 0.000015, parallel_tool_call=True
         )
         self.note = "Most intelligent model from Antropic"
+
+class Claude3_7SonnetNew(AnthropicModel):
+    def __init__(self):
+        super().__init__(
+            "claude-3-7-sonnet-20250219", 0.000003, 0.000015, parallel_tool_call=True
+        )
+        self.note = "Most intelligent model from Antropic"
