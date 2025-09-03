@@ -1,0 +1,28 @@
+**Namespace:** `math.learning_rate_decay`
+
+## Summary
+
+Implement a function that calculates learning rate decay for training neural networks.
+
+## Description
+
+Create a function that takes an initial learning rate and applies exponential decay based on the current epoch.
+
+```python
+def exponential_decay(initial_lr, epoch, decay_rate=0.9):
+    """
+    Calculate exponential learning rate decay.
+    
+    Args:
+        initial_lr: Initial learning rate
+        epoch: Current training epoch
+        decay_rate: Decay rate per epoch
+    
+    Returns:
+        Decayed learning rate
+    """
+    pass
+```
+
+The function should return the decayed learning rate using the formula:
+`lr = initial_lr * (decay_rate ^ epoch)`

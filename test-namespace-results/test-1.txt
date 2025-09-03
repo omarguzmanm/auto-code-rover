@@ -1,0 +1,11 @@
+def exponential_decay(initial_lr, epoch, decay_rate=0.9):
+    """
+    Calculate exponential learning rate decay.
+    Args:
+        initial_lr: Initial learning rate
+        epoch: Current training epoch
+        decay_rate: Decay rate per epoch
+    Returns:
+        Decayed learning rate
+    """
+    return initial_lr * (decay_rate ** epoch)
